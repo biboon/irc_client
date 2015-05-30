@@ -63,10 +63,10 @@ void procOutgoingMessage(int sock, char* msg, int size) {
 	else if (strstr(tmp, "msg") == (tmp + 1)) {
 		char* dest = (char*) malloc(20 * sizeof(char));
 		char* message = (char*) malloc(size * sizeof(char));
-		if (sscanf(tmp, "/msg \"%s\" %s\n", dest, message) == 2)
+		if (getMsgDest(tmp, dest, message) == 2)
 			length = sprintf(buf, "PRIVMSG %s :%s\n", dest, message);
 		else {
-			printf("Error command: %s: %s %s\n", tmp); valid = 0;
+			printf("Error command: %s\n", tmp); valid = 0;
 		}
 		free(dest); free(message);
 	}
@@ -89,4 +89,33 @@ void procOutgoingMessage(int sock, char* msg, int size) {
 		#endif
 	}
 	free(buf); free(tmp);
+}
+
+
+/* Equivalent to reg expression \/msg [[:alphanum]] [[:alphanum:] ] */
+int getMsgDest(char* buf, char* dest, char* msg) {
+	int i = 0, j = 0, res = 0;
+	char cmd[5] = "/msg ";
+	for (i = 0; i < 5; i++) {
+		if (cmd[i] != buf[i]) return -1;
+	}
+
+	while (buf[i] == ' ' && buf[i] != '\0') i++; /* ignoring spaces */
+
+	while (buf[i] != ' ' && buf[i] != '\0') { /* getting dest name */
+		dest[j] = buf[i];
+		i++; j++;
+	}
+	dest[j] = '\0'; if (j != 0) res++;
+
+	while (buf[i] == ' ' && buf[i] != '\0') i++; /* ignoring spaces */
+
+	j = 0;
+	while (buf[i] != '\0') { /* getting message */
+		msg[j] = buf[i];
+		i++; j++;
+	}
+	msg[j] = '\0'; if (j != 0) res++;
+
+	return res;
 }
