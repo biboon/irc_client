@@ -21,7 +21,7 @@ void startSendLoop(void* arg) {
 		fprintf(stdout, "Starting send loop\n");
 	#endif
 	int sock = *((int*) arg);
-	clientSendLoop(sock);
+	clientSendLoop(sock, procOutgoingMessage);
 }
 
 void startReceiveLoop(void* arg) {
@@ -29,7 +29,7 @@ void startReceiveLoop(void* arg) {
 		fprintf(stdout, "Starting receive loop\n");
 	#endif
 	int sock = *((int*) arg);
-	clientReceiveLoop(sock);
+	clientReceiveLoop(sock, procIncomingMessage);
 }
 
 
