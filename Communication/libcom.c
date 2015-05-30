@@ -20,28 +20,38 @@ void stopConnexions() {
 
 /* Hote port */
 int connexionServeur(char *hote, char *service){
-	struct addrinfo precisions, *resultat, *origine, *p;
+	struct addrinfo precisions, *resultat, *p;
 	int statut, s;
 
 	/* Creation de l'adresse de socket */
 	memset(&precisions, 0, sizeof precisions);
 	precisions.ai_family = AF_UNSPEC;
 	precisions.ai_socktype = SOCK_STREAM;
-	statut = getaddrinfo(hote, service, &precisions, &origine);
+	statut = getaddrinfo(hote, service, &precisions, &resultat);
 	if (statut < 0) { perror("connexionServeur.getaddrinfo"); exit(EXIT_FAILURE); }
 
-	for (p = origine, resultat = origine; p != NULL; p = p->ai_next)
+#if 0
+	for (p = resultat; p != NULL; p = p->ai_next)
 		if (p->ai_family == AF_INET6) { resultat = p; break; }
+#endif
 
+	for (p = resultat; p != NULL; p = p->ai_next) {
+		s = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		if (s < 0) continue;
+		if (connect(s, p->ai_addr, p->ai_addrlen) == 0) break; /*Success */
+	}
+
+#if 0
 	/* Creation d'une socket */
 	s = socket(resultat->ai_family, resultat->ai_socktype, resultat->ai_protocol);
 	if (s < 0) { perror("connexionServeur.socket"); exit(EXIT_FAILURE); }
 
 	/* Connection de la socket a l'hote */
 	if (connect(s, resultat->ai_addr, resultat->ai_addrlen) < 0) { perror("libcom.connexionServeur.connect"); return -1; }
+#endif
 
 	/* Liberation de la structure d'informations */
-	freeaddrinfo(origine);
+	freeaddrinfo(resultat);
 
 	return s;
 }
