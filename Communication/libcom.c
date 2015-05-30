@@ -30,47 +30,16 @@ int connexionServeur(char *hote, char *service){
 	statut = getaddrinfo(hote, service, &precisions, &resultat);
 	if (statut < 0) { perror("connexionServeur.getaddrinfo"); exit(EXIT_FAILURE); }
 
-#if 0
-	for (p = resultat; p != NULL; p = p->ai_next)
-		if (p->ai_family == AF_INET6) { resultat = p; break; }
-#endif
-
 	for (p = resultat; p != NULL; p = p->ai_next) {
 		s = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (s < 0) continue;
 		if (connect(s, p->ai_addr, p->ai_addrlen) == 0) break; /*Success */
 	}
 
-#if 0
-	/* Creation d'une socket */
-	s = socket(resultat->ai_family, resultat->ai_socktype, resultat->ai_protocol);
-	if (s < 0) { perror("connexionServeur.socket"); exit(EXIT_FAILURE); }
-
-	/* Connection de la socket a l'hote */
-	if (connect(s, resultat->ai_addr, resultat->ai_addrlen) < 0) { perror("libcom.connexionServeur.connect"); return -1; }
-#endif
-
 	/* Liberation de la structure d'informations */
 	freeaddrinfo(resultat);
 
 	return s;
-}
-
-int setupUser(int sock, char* nick, char* usr) {
-	char buf[BUFSIZE];
-	int length;
-	if (read(sock, buf, BUFSIZE) < 0) { perror("libcom.setUpUser.read"); return -1; }
-	if (strstr(buf, "Found your hostname") != NULL) {
-		length = sprintf(buf, "NICK %s\n", nick);
-		if (length != write(sock, buf, length)) { perror("libcom.setupUser.write"); return -3; }
-		length = sprintf(buf, "USER %s 8 * :%s\n", nick, usr);
-		if (length != write(sock, buf, length)) { perror("libcom.setupUser.write"); return -4; }
-		printf("Connected !\n");
-		return 0;
-	} else {
-		printf("Could not connect to the server\n");
-		return -2;
-	}
 }
 
 void clientReceiveLoop(int sock) {

@@ -7,7 +7,7 @@ export CFLAGS = -Wall
 
 
 # Constantes liees au projet
-DIRS=Communication Threads Client
+DIRS=Communication Threads IRC Client
 
 # La cible generale
 all: $(patsubst %, _dir_%, $(DIRS))

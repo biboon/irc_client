@@ -8,6 +8,7 @@
 
 #include <libcom.h>
 #include <libthrd.h>
+#include <libirc.h>
 
 #define STRLEN 30
 #define TIMEOUT 10

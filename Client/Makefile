@@ -2,9 +2,9 @@
 
 OBJS = client.o
 LIBS = -lpthread
-LOCAL_LIBS  = -L ../Communication -L ../Threads
-LOCAL_LIBS += -lcom -lthrd
-CFLAGS     += -I ../Communication -I ../Threads
+LOCAL_LIBS  = -L ../Communication -L ../Threads -L ../IRC
+LOCAL_LIBS += -lcom -lthrd -lirc
+CFLAGS     += -I ../Communication -I ../Threads -I ../IRC
 
 # Cible generale
 all: client
@@ -18,4 +18,3 @@ client: $(OBJS)
 	$(CC) $(CFLAGS) -o client $(OBJS) $(LOCAL_LIBS) $(LIBS)
 
 client.o: client.c
-
