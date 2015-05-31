@@ -6,8 +6,10 @@
 #include "libirc.h"
 
 #define BUFSIZE 4096
+#define NAMELEN 20
+#define CMDLEN 20
 
-static char channel[20];
+static char channel[NAMELEN];
 static int channelset = 0;
 
 
@@ -30,13 +32,27 @@ int setupUser(int sock, char* nick, char* usr) {
 
 
 void procIncomingMessage(char* msg, int size) {
-	printf("Srv >> %s\n", msg);
+	char* tmp = (char*) malloc(size * sizeof(char));
+	char* sender = (char*) malloc(NAMELEN * sizeof(char));
+	char* dest = (char*) malloc(NAMELEN * sizeof(char));
+	char* message = (char*) malloc(BUFSIZE * sizeof(char));
+
+	*tmp = '\0';
+	strncat(tmp, msg, size);
+
+	if (getMsgReceived(tmp, sender, dest, message) == 3) {
+		if (dest[0] == '#')
+			printf("%12s | %s\n", sender, message);
+		else
+			printf(">%10s< | %s\n", sender, message);
+	} else
+		printf("Srv >> %s\n", tmp);
 }
 
 
 void procOutgoingMessage(int sock, char* msg, int size) {
 	int length, valid = 1;
-	char* buf = (char*) malloc((size + 30) * sizeof(char));
+	char* buf = (char*) malloc((size + CMDLEN) * sizeof(char));
 	char* tmp = (char*) malloc(size * sizeof(char));
 	*buf = '\0'; *tmp = '\0';
 	strncat(tmp, msg, size);
@@ -61,9 +77,9 @@ void procOutgoingMessage(int sock, char* msg, int size) {
 		}
 	}
 	else if (strstr(tmp, "msg") == (tmp + 1)) {
-		char* dest = (char*) malloc(20 * sizeof(char));
+		char* dest = (char*) malloc(NAMELEN * sizeof(char));
 		char* message = (char*) malloc(size * sizeof(char));
-		if (getMsgDest(tmp, dest, message) == 2)
+		if (setMsgDest(tmp, dest, message) == 2)
 			length = sprintf(buf, "PRIVMSG %s :%s\n", dest, message);
 		else {
 			printf("Error command: %s\n", tmp); valid = 0;
@@ -93,7 +109,7 @@ void procOutgoingMessage(int sock, char* msg, int size) {
 
 
 /* Equivalent to reg expression \/msg [[:alphanum]] [[:alphanum:] ] */
-int getMsgDest(char* buf, char* dest, char* msg) {
+int setMsgDest(char* buf, char* dest, char* msg) {
 	int i = 0, j = 0, res = 0;
 	char cmd[5] = "/msg ";
 	for (i = 0; i < 5; i++) {
@@ -112,6 +128,48 @@ int getMsgDest(char* buf, char* dest, char* msg) {
 
 	j = 0;
 	while (buf[i] != '\0') { /* getting message */
+		msg[j] = buf[i];
+		i++; j++;
+	}
+	msg[j] = '\0'; if (j != 0) res++;
+
+	return res;
+}
+
+int getMsgReceived(char* buf, char* sender, char* dest, char* msg) {
+	int i = 0, j = 0, res = 0;
+	char cmd[9] = " PRIVMSG "; cmd[9] = '\0';
+
+	while (buf[i] != ':' && buf[i] != '\0') i++; /* Ignoring chars before ':' */
+	i++;
+
+	while (buf[i] != '!' && buf[i] != '\0') { /* Getting sender name */
+		sender[j] = buf[i];
+		i++; j++;
+	}
+	sender[j] = '\0'; if (j != 0) res++;
+
+	while (buf[i] != ' ' && buf[i] != '\0') i++; /* Ignoring chars before command */
+
+	j = 0;
+	while (cmd[j] != '\0' && buf[i] != '\0') { /* Checking the PRIVMSG command */
+		if (buf[i] != cmd[j])
+			return -1;
+		i++; j++;
+	}
+
+	j = 0;
+	while (buf[i] != ' ' && buf[i] != '\0') { /*Getting the destination name */
+		dest[j] = buf[i];
+		i++; j++;
+	}
+	dest[j] = '\0'; if (j != 0) res++;
+
+	while (buf[i] != ':' && buf[i] != '\0') i++; /* Ignoring chars before ':' */
+	i++;
+
+	j = 0;
+	while (buf[i] != '\n' && buf[i] != '\0') { /* Getting the message */
 		msg[j] = buf[i];
 		i++; j++;
 	}
