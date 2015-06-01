@@ -8,7 +8,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-#define BUFSIZE 4096
+#define BUFSIZE 2048
 
 
 static bool _quit = false;
@@ -42,13 +42,13 @@ int connexionServeur(char *hote, char *service){
 	return s;
 }
 
-void clientReceiveLoop(int sock, void (*traitement)(char *, int)) {
+void clientReceiveLoop(int sock, void (*traitement)(int, char *, int)) {
 	int length;
 	while (!_quit) {
 		char buf[BUFSIZE];
 		length = read(sock, buf, BUFSIZE);
 		if (length <= 0) { perror("libcom.clientReceiveLoop.read"); break; }
-		traitement(buf, length);
+		else traitement(sock, buf, length);
 	}
 }
 
@@ -58,6 +58,6 @@ void clientSendLoop(int sock, void (*traitement)(int, char *, int)) {
 		char buf[BUFSIZE];
 		length = read(0, buf, BUFSIZE);
 		if (length < 0) { perror("libcom.clientSendLoop.read"); break; }
-		traitement(sock, buf, length);
+		else traitement(sock, buf, length);
 	}
 }

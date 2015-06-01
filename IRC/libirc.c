@@ -5,8 +5,8 @@
 
 #include "libirc.h"
 
-#define BUFSIZE 4096
-#define NAMELEN 20
+#define BUFSIZE 2048
+#define NAMELEN 40
 #define CMDLEN 20
 
 static char channel[NAMELEN];
@@ -14,55 +14,83 @@ static int channelset = 0;
 
 
 int setupUser(int sock, char* nick, char* usr) {
-	char buf[BUFSIZE];
+	char* buf = (char*) malloc((BUFSIZE + 1) * sizeof(char)); buf[0] = '\0';
 	int length;
-	if (read(sock, buf, BUFSIZE) < 0) { perror("libcom.setUpUser.read"); return -1; }
+
+	if (read(sock, buf, BUFSIZE) < 0) {
+		perror("libcom.setUpUser.read");
+		free(buf);
+		return -1;
+	}
+
 	if (strstr(buf, "Found your hostname") != NULL) {
 		length = sprintf(buf, "NICK %s\n", nick);
-		if (length != write(sock, buf, length)) { perror("libcom.setupUser.write"); return -3; }
+		if (length != write(sock, buf, length)) {
+			perror("libcom.setupUser.write");
+			free(buf);
+			return -3;
+		}
+		#ifdef DEBUG
+			printf("Command sent: %s\n", buf);
+		#endif
+
 		length = sprintf(buf, "USER %s 8 * :%s\n", nick, usr);
-		if (length != write(sock, buf, length)) { perror("libcom.setupUser.write"); return -4; }
+		if (length != write(sock, buf, length)) {
+			perror("libcom.setupUser.write");
+			free(buf);
+			return -4;
+		}
+		#ifdef DEBUG
+			printf("Command sent: %s\n", buf);
+		#endif
+
 		printf("Connected !\n");
+		free(buf);
 		return 0;
 	} else {
 		printf("Could not connect to the server\n");
+		free(buf);
 		return -2;
 	}
 }
 
 
-void procIncomingMessage(char* msg, int size) {
-	char* tmp = (char*) malloc(size * sizeof(char));
-	char* sender = (char*) malloc(NAMELEN * sizeof(char));
-	char* dest = (char*) malloc(NAMELEN * sizeof(char));
-	char* message = (char*) malloc(BUFSIZE * sizeof(char));
+void procIncomingMessage(int sock, char* msg, int size) {
+	char* tmp = (char*) malloc((size + 1) * sizeof(char));
+	char* sender = (char*) malloc((NAMELEN + 1) * sizeof(char));
+	char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
+	char* message = (char*) malloc((BUFSIZE + 1) * sizeof(char));
 
-	*tmp = '\0';
-	strncat(tmp, msg, size);
+	strncpy(tmp, msg, size); tmp[size] = '\0';
 
-	if (getMsgReceived(tmp, sender, dest, message) == 3) {
-		if (dest[0] == '#')
-			printf("%12s | %s\n", sender, message);
-		else
-			printf(">%10s< | %s\n", sender, message);
+	if (getMsgReceived(tmp, size, sender, dest, message) == 3) {
+		printf(((dest[0] == '#') ? "%12s | %s\n" : ">%10s< | %s\n"), sender, message);
+	} else if (getPingRequest(tmp, size, sender) == 2) {
+		#ifdef DEBUG
+			printf("Sending PONG to %s\n", sender);
+		#endif
+		int length = sprintf(message, "PONG :%s\n", sender);
+		write(sock, message, length);
 	} else
 		printf("Srv >> %s\n", tmp);
+
+	free(tmp); free(sender); free(dest); free(message);
 }
 
 
 void procOutgoingMessage(int sock, char* msg, int size) {
 	int length, valid = 1;
-	char* buf = (char*) malloc((size + CMDLEN) * sizeof(char));
-	char* tmp = (char*) malloc(size * sizeof(char));
-	*buf = '\0'; *tmp = '\0';
-	strncat(tmp, msg, size);
+	char* buf = (char*) malloc((size + NAMELEN + CMDLEN) * sizeof(char));
+	char* tmp = (char*) malloc((size + 1) * sizeof(char));
+
+	strncpy(tmp, msg, size); tmp[size] = '\0';
 
 	if (tmp[0] != '/') {
 		if (channelset == 0) { /* Checking if the channel is set */
 			printf("Can't send the message: join a channel first\n");
 			return;
 		} else {
-			length = sprintf(buf, "PRIVMSG %s :%s\n", channel, tmp);
+			length = sprintf(buf, "PRIVMSG %s :%s", channel, tmp);
 		}
 	}
 	else if (strstr(tmp, "join") == (tmp + 1)) {
@@ -77,7 +105,7 @@ void procOutgoingMessage(int sock, char* msg, int size) {
 		}
 	}
 	else if (strstr(tmp, "msg") == (tmp + 1)) {
-		char* dest = (char*) malloc(NAMELEN * sizeof(char));
+		char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
 		char* message = (char*) malloc(size * sizeof(char));
 		if (setMsgDest(tmp, dest, message) == 2)
 			length = sprintf(buf, "PRIVMSG %s :%s\n", dest, message);
@@ -136,44 +164,62 @@ int setMsgDest(char* buf, char* dest, char* msg) {
 	return res;
 }
 
-int getMsgReceived(char* buf, char* sender, char* dest, char* msg) {
+int getMsgReceived(char* buf, int size, char* sender, char* dest, char* msg) {
 	int i = 0, j = 0, res = 0;
 	char cmd[9] = " PRIVMSG "; cmd[9] = '\0';
 
-	while (buf[i] != ':' && buf[i] != '\0') i++; /* Ignoring chars before ':' */
+	while (i < size && buf[i] != ':') i++; /* Ignoring chars before ':' */
 	i++;
 
-	while (buf[i] != '!' && buf[i] != '\0') { /* Getting sender name */
+	while (i < size && buf[i] != '!' && j < NAMELEN) { /* Getting sender name */
 		sender[j] = buf[i];
 		i++; j++;
 	}
 	sender[j] = '\0'; if (j != 0) res++;
 
-	while (buf[i] != ' ' && buf[i] != '\0') i++; /* Ignoring chars before command */
+	while (i < size && buf[i] != ' ') i++; /* Ignoring chars before command */
 
 	j = 0;
-	while (cmd[j] != '\0' && buf[i] != '\0') { /* Checking the PRIVMSG command */
+	while (i < size && cmd[j] != '\0') { /* Checking the PRIVMSG command */
 		if (buf[i] != cmd[j])
 			return -1;
 		i++; j++;
 	}
 
 	j = 0;
-	while (buf[i] != ' ' && buf[i] != '\0') { /*Getting the destination name */
+	while (i < size && buf[i] != ' ' && j < NAMELEN) { /*Getting the destination name */
 		dest[j] = buf[i];
 		i++; j++;
 	}
 	dest[j] = '\0'; if (j != 0) res++;
 
-	while (buf[i] != ':' && buf[i] != '\0') i++; /* Ignoring chars before ':' */
+	while (i < size && buf[i] != ':') i++; /* Ignoring chars before ':' */
 	i++;
 
 	j = 0;
-	while (buf[i] != '\n' && buf[i] != '\0') { /* Getting the message */
+	while (i < size && buf[i] != '\n' && j < BUFSIZE) { /* Getting the message */
 		msg[j] = buf[i];
 		i++; j++;
 	}
 	msg[j] = '\0'; if (j != 0) res++;
 
+	return res;
+}
+
+int getPingRequest(char* buf, int size, char* sender) {
+	int i = 0, j = 0, res = 0;
+	char cmd[6] = "PING :"; cmd[6] = '\0';
+
+	while (i < size && cmd[i] != '\0') { /* checking we got a ping request */
+		if (cmd[i] != buf[i]) return -1;
+		i++;
+	}
+	res++;
+
+	while (i < size && buf[i] != '\n' && j < NAMELEN) { /* Getting the sender name */
+		sender[j] = buf[i];
+		i++; j++;
+	}
+	sender[j] = '\0'; if (j != 0) res++;
 	return res;
 }

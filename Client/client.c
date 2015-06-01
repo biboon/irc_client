@@ -18,7 +18,7 @@ static bool _quit = false;
 
 void startSendLoop(void* arg) {
 	#ifdef DEBUG
-		fprintf(stdout, "Starting send loop\n");
+		fprintf(stdout, "Starting send loop thread\n");
 	#endif
 	int sock = *((int*) arg);
 	clientSendLoop(sock, procOutgoingMessage);
@@ -26,7 +26,7 @@ void startSendLoop(void* arg) {
 
 void startReceiveLoop(void* arg) {
 	#ifdef DEBUG
-		fprintf(stdout, "Starting receive loop\n");
+		fprintf(stdout, "Starting receive loop thread\n");
 	#endif
 	int sock = *((int*) arg);
 	clientReceiveLoop(sock, procIncomingMessage);
