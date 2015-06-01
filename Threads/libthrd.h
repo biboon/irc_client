@@ -22,7 +22,7 @@ int getLivingThreads();
 /* Mutexes */
 void P(int index);
 void V(int index);
-void initMutexes(int nb, int val);
+void initMutexes(int nb, unsigned short val);
 void sem_free();
 
 #endif

@@ -41,10 +41,11 @@ void sem_free() {
 }
 
 /* Initiates the semaphore at value val */
-static void sem_init(int nb, int val) {
+static void sem_init(int nb, unsigned short val) {
 	int status = -1;
 	union semun argument;
 	unsigned short values[nb];
+
 	/* Initializing semaphore values to val */
 	memset(values, val, nb * sizeof(unsigned short));
 	argument.array = values;
@@ -64,7 +65,7 @@ static int PV(int index, int act) {
 }
 
 
-void initMutexes(int nb, int val) {
+void initMutexes(int nb, unsigned short val) {
 	sem_alloc(nb);
 	sem_init(nb, val);
 }
