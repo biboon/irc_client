@@ -76,14 +76,22 @@ int setupUser(int sock, char* nick, char* usr, int retries) {
 int procIncomingMessage(int sock, char* msg, int size) {
 	char* sender = (char*) malloc((NAMELEN + 1) * sizeof(char));
 	char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
-	char* message = (char*) malloc(size * sizeof(char));
+	char* message = NULL;
 
 	#ifdef DEBUG
 		printf("Received the message: \"%s\"\n", msg);
 	#endif
 
-	if (getMsgReceived(msg, size, sender, dest, message) == 3) {
-		printf(((dest[0] == '#') ? "%12s | %s\n" : ">%10s< | %s\n"), sender, message);
+	if (getMsgReceived(msg, size, sender, dest, &message) == 3) {
+		if (dest[0] == '#')
+			printf("%12s | %s", sender, message);
+		else {
+			setcolor(RED);
+			printf("%12s", sender);
+			setcolor(RESET);
+			printf(" | %s", message);
+		}
+		fflush(stdout);
 	} else if (getPingRequest(msg, size, sender) == 2) {
 		#ifdef DEBUG
 			printf("Sending PONG to %s\n", sender);
@@ -100,7 +108,7 @@ int procIncomingMessage(int sock, char* msg, int size) {
 		fflush(stdout);
 	}
 
-	free(sender); free(dest); free(message);
+	free(sender); free(dest);
 
 	return 0;
 }
@@ -204,44 +212,47 @@ int setMsgDest(char* buf, char* dest, char* msg) {
 	return res;
 }
 
-int getMsgReceived(char* buf, int size, char* sender, char* dest, char* msg) {
+int getMsgReceived(char* buf, int size, char* sender, char* dest, char** msg) {
 	int i = 0, j = 0, res = 0;
-	char cmd[9] = " PRIVMSG "; cmd[9] = '\0';
+	char* cmd = (char*) malloc((CMDLEN + 1) * sizeof(char));
+	char* longname = (char*) malloc(size * sizeof(char));
 
-	while (i < size && buf[i] != ':') i++; /* Ignoring chars before ':' */
-	i++;
+	res = sscanf(buf, "%s %s %s", longname, cmd, dest);
+	#ifdef DEBUG
+		printf("getMsgReceived got: res: %d longname: %s cmd: %s dest: %s\n", res, longname, cmd, dest);
+	#endif
 
-	while (i < size && buf[i] != '!' && j < NAMELEN) { /* Getting sender name */
-		sender[j] = buf[i];
-		i++; j++;
+	if (res != 3 || strcmp("PRIVMSG", cmd) != 0)
+		res = 0;
+	else {
+		res = 1; /* We already got the dest name */
+
+		/* Ignoring chars before ':' */
+		while ((buf[i] & (':' | '\0')) != (':' | '\0')) i++;
+		i++;
+
+		/* Getting sender name */
+		while (longname[i + j] != '!' && longname[i + j] != '\0' && j < NAMELEN) {
+			sender[j] = longname[i + j];
+			j++;
+		}
+		if (j != 0) res++;
+		sender[j] = '\0';
+		i += j; j = 0;
+
+		i = strstr(buf, dest) - buf;
+
+		/* Ignoring until we get to the message */
+		while (buf[i] != ':' && buf[i] != '\0') i++;
+		if (buf[i] == ':') { i++; res++; }
+		*msg = (buf + i);
+
+		#ifdef DEBUG
+			printf("getMsgReceived set: sender: %s dest: %s msg: %s\n", sender, dest, *msg);
+		#endif
 	}
-	sender[j] = '\0'; if (j != 0) res++;
 
-	while (i < size && buf[i] != ' ') i++; /* Ignoring chars before command */
-
-	j = 0;
-	while (i < size && cmd[j] != '\0') { /* Checking the PRIVMSG command */
-		if (buf[i] != cmd[j])
-			return -1;
-		i++; j++;
-	}
-
-	j = 0;
-	while (i < size && buf[i] != ' ' && j < NAMELEN) { /*Getting the destination name */
-		dest[j] = buf[i];
-		i++; j++;
-	}
-	dest[j] = '\0'; if (j != 0) res++;
-
-	while (i < size && buf[i] != ':') i++; /* Ignoring chars before ':' */
-	i++;
-
-	j = 0;
-	while (i < size && buf[i] != '\n' && j < size - 1) { /* Getting the message */
-		msg[j] = buf[i];
-		i++; j++;
-	}
-	msg[j] = '\0'; if (j != 0) res++;
+	free(cmd); free(longname);
 
 	return res;
 }

@@ -7,7 +7,7 @@
 #define clrscr() printf("\033[H\033[2J")
 
 /* Changes color */
-#define setcolor(param) printf("\033[%sm",param)
+#define setcolor(param) printf("\033[%sm", param)
 
 /* Colors definitions */
 #define RESET "0"
@@ -22,6 +22,6 @@
 #define CYAN "36"
 #define WHITE "37"
 
-/*Add 10 for background color */
+/* Add 10 for background color */
 
 #endif
