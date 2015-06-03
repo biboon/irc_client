@@ -1,10 +1,9 @@
 # Makefile pour generer le serveur
 
 OBJS = client.o
-LIBS = -lpthread
-LOCAL_LIBS  = -L ../Communication -L ../Threads -L ../IRC
-LOCAL_LIBS += -lcom -lthrd -lirc
-CFLAGS     += -I ../Communication -I ../Threads -I ../IRC
+LOCAL_LIBS  = -L ../Communication -L ../IRC
+LOCAL_LIBS += -lcom -lirc
+CFLAGS     += -I ../Communication -I ../IRC
 
 # Cible generale
 all: client

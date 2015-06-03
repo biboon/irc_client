@@ -7,12 +7,12 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <poll.h>
 
 #define BUFSIZE 2048
 
 
 static bool _quit = false;
-
 void stopConnexions() {
 	_quit = true;
 }
@@ -42,22 +42,30 @@ int connexionServeur(char *hote, char *service){
 	return s;
 }
 
-void clientReceiveLoop(int sock, void (*traitement)(int, char *, int)) {
-	int length;
-	while (!_quit) {
-		char buf[BUFSIZE];
-		length = read(sock, buf, BUFSIZE);
-		if (length <= 0) { perror("libcom.clientReceiveLoop.read"); break; }
-		else traitement(sock, buf, length);
-	}
-}
+void clientLoop(int sock, int iface, void (*inProc)(int, char*, int), void (*outProc)(int, char*, int)) {
+	/* Initializing structure */
+	struct pollfd fds[2];
+	memset(fds, -1, sizeof(fds));
+	fds[0].fd = sock;
+	fds[1].fd = iface;
+	fds[0].events = POLLIN;
+	fds[1].events = POLLIN;
 
-void clientSendLoop(int sock, void (*traitement)(int, char *, int)) {
-	int length;
 	while (!_quit) {
-		char buf[BUFSIZE];
-		length = read(0, buf, BUFSIZE);
-		if (length < 0) { perror("libcom.clientSendLoop.read"); break; }
-		else traitement(sock, buf, length);
+		if (poll(fds, 2, 10) < 0) { perror("clientLoop.poll"); exit(EXIT_FAILURE); }
+
+		int length = -1, i;
+
+		for (i = 0; i < 2; i++) {
+			if (fds[i].revents & POLLIN) { /* receiving data from server/iface */
+				char *buf = (char*) malloc((BUFSIZE + 1) * sizeof(char));
+				length = read(fds[i].fd, buf, BUFSIZE);
+				if (length < 0) { perror("clientLoop.read"); free(buf); exit(EXIT_FAILURE); }
+				buf[length] = '\0';
+				if (i == 0) inProc(sock, buf, length);
+				else outProc(sock, buf, length);
+				free(buf);
+			}
+		}
 	}
 }

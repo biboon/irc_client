@@ -2,8 +2,7 @@
 #define __LIBCOM_H__
 
 int connexionServeur(char *hote, char *service);
-void clientReceiveLoop(int sock, void (*traitement)(int, char *, int));
-void clientSendLoop(int sock, void (*traitement)(int, char *, int));
+void clientLoop(int sock, int iface, void (*inProc)(int, char*, int), void (*outProc)(int, char*, int));
 
 int setupUser(int sock, char* nick, char* usr);
 

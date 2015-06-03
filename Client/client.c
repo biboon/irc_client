@@ -7,30 +7,10 @@
 #include <signal.h>
 
 #include <libcom.h>
-#include <libthrd.h>
 #include <libirc.h>
 
 #define STRLEN 30
 #define TIMEOUT 10
-
-static bool _quit = false;
-
-
-void startSendLoop(void* arg) {
-	#ifdef DEBUG
-		fprintf(stdout, "Starting send loop thread\n");
-	#endif
-	int sock = *((int*) arg);
-	clientSendLoop(sock, procOutgoingMessage);
-}
-
-void startReceiveLoop(void* arg) {
-	#ifdef DEBUG
-		fprintf(stdout, "Starting receive loop thread\n");
-	#endif
-	int sock = *((int*) arg);
-	clientReceiveLoop(sock, procIncomingMessage);
-}
 
 
 void usage(char* pgm) {
@@ -91,21 +71,8 @@ int main(int argc, char** argv) {
 	/* Setting user info */
 	if (setupUser(sock, nick, usr) < 0) return -1;
 
-	/* Starting threads */
-	if (lanceThread(&startReceiveLoop, (void *) &sock, sizeof(int)) < 0) {
-		perror("Could not start receive loop"); exit(EXIT_FAILURE);
-	}
-	if (lanceThread(&startSendLoop, (void *) &sock, sizeof(int)) < 0) {
-		perror ("Could not start send loop"); exit(EXIT_FAILURE);
-	}
-
-	/* Let working... */
-	while (!_quit) sleep(1);
-
-	/* Waiting for threads to end */
-	int time = 0;
-	while (getLivingThreads() > 0 && time < TIMEOUT) { sleep(1); time++; }
-	if (time == TIMEOUT) printf("Client quit timeout\n");
+	/* Starting main loop */
+	clientLoop(sock, 0, procIncomingMessage, procOutgoingMessage);
 
 	return 0;
 }
