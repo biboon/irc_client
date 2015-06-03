@@ -56,67 +56,61 @@ int setupUser(int sock, char* nick, char* usr) {
 
 
 void procIncomingMessage(int sock, char* msg, int size) {
-	char* tmp = (char*) malloc((size + 1) * sizeof(char));
 	char* sender = (char*) malloc((NAMELEN + 1) * sizeof(char));
 	char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
-	char* message = (char*) malloc((BUFSIZE + 1) * sizeof(char));
+	char* message = (char*) malloc(size * sizeof(char));
 
-	strncpy(tmp, msg, size); tmp[size] = '\0';
-
-	if (getMsgReceived(tmp, size, sender, dest, message) == 3) {
+	if (getMsgReceived(msg, size, sender, dest, message) == 3) {
 		printf(((dest[0] == '#') ? "%12s | %s\n" : ">%10s< | %s\n"), sender, message);
-	} else if (getPingRequest(tmp, size, sender) == 2) {
+	} else if (getPingRequest(msg, size, sender) == 2) {
 		#ifdef DEBUG
 			printf("Sending PONG to %s\n", sender);
 		#endif
 		int length = sprintf(message, "PONG :%s\n", sender);
 		write(sock, message, length);
 	} else
-		printf("Srv >> %s\n", tmp);
+		printf("Srv >> %s\n", msg);
 
-	free(tmp); free(sender); free(dest); free(message);
+	free(sender); free(dest); free(message);
 }
 
 
 void procOutgoingMessage(int sock, char* msg, int size) {
 	int length, valid = 1;
 	char* buf = (char*) malloc((size + NAMELEN + CMDLEN) * sizeof(char));
-	char* tmp = (char*) malloc((size + 1) * sizeof(char));
 
-	strncpy(tmp, msg, size); tmp[size] = '\0';
-
-	if (tmp[0] != '/') {
+	if (msg[0] != '/') {
 		if (channelset == 0) { /* Checking if the channel is set */
 			printf("Can't send the message: join a channel first\n");
 			return;
 		} else {
-			length = sprintf(buf, "PRIVMSG %s :%s", channel, tmp);
+			length = sprintf(buf, "PRIVMSG %s :%s", channel, msg);
 		}
 	}
-	else if (strstr(tmp, "join") == (tmp + 1)) {
+	else if (strstr(msg, "join") == (msg + 1)) {
 		if (channelset == 1)
 			printf("Already joined channel %s\n", channel);
-		else if (sscanf(tmp, "/join %s\n", channel) == 1) {
+		else if (sscanf(msg, "/join %s\n", channel) == 1) {
 			length = sprintf(buf, "JOIN %s\n", channel);
 			printf("Joining channel %s\n", channel);
 			channelset = 1;
 		} else {
-			printf("Error command: %s\n", tmp); valid = 0;
+			printf("Error command: %s\n", msg); valid = 0;
 		}
 	}
-	else if (strstr(tmp, "msg") == (tmp + 1)) {
+	else if (strstr(msg, "msg") == (msg + 1)) {
 		char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
 		char* message = (char*) malloc(size * sizeof(char));
-		if (setMsgDest(tmp, dest, message) == 2)
+		if (setMsgDest(msg, dest, message) == 2)
 			length = sprintf(buf, "PRIVMSG %s :%s\n", dest, message);
 		else {
-			printf("Error command: %s\n", tmp); valid = 0;
+			printf("Error command: %s\n", msg); valid = 0;
 		}
 		free(dest); free(message);
 	}
-	else if (strstr(tmp, "quit") == (tmp + 1)) {
+	else if (strstr(msg, "quit") == (msg + 1)) {
 		char* message = (char*) malloc(size * sizeof(char));
-		if (sscanf(tmp, "/quit %s\n", message) == 1)
+		if (sscanf(msg, "/quit %s\n", message) == 1)
 			length = sprintf(buf, "QUIT :%s\n", message);
 		else
 			length = sprintf(buf, "QUIT\n");
@@ -132,11 +126,11 @@ void procOutgoingMessage(int sock, char* msg, int size) {
 			printf("\tCommand sent: >>%s<<\n", buf);
 		#endif
 	}
-	free(buf); free(tmp);
+	free(buf);
 }
 
 
-/* Equivalent to reg expression \/msg [[:alphanum]] [[:alphanum:] ] */
+/* Equivalent to reg expression \/msg [[:alphanum:]] [[:alphanum:] ] */
 int setMsgDest(char* buf, char* dest, char* msg) {
 	int i = 0, j = 0, res = 0;
 	char cmd[5] = "/msg ";
@@ -197,7 +191,7 @@ int getMsgReceived(char* buf, int size, char* sender, char* dest, char* msg) {
 	i++;
 
 	j = 0;
-	while (i < size && buf[i] != '\n' && j < BUFSIZE) { /* Getting the message */
+	while (i < size && buf[i] != '\n' && j < size - 1) { /* Getting the message */
 		msg[j] = buf[i];
 		i++; j++;
 	}
