@@ -9,7 +9,7 @@
 #include <netdb.h>
 #include <poll.h>
 
-#define BUFSIZE 2048
+#define BUFSIZE 4096
 
 
 static bool _quit = false;
@@ -42,7 +42,7 @@ int connexionServeur(char *hote, char *service){
 	return s;
 }
 
-void clientLoop(int sock, int iface, void (*inProc)(int, char*, int), void (*outProc)(int, char*, int)) {
+void clientLoop(int sock, int iface, int (*inProc)(int, char*, int), int (*outProc)(int, char*, int)) {
 	/* Initializing structure */
 	struct pollfd fds[2];
 	memset(fds, -1, sizeof(fds));
@@ -52,7 +52,7 @@ void clientLoop(int sock, int iface, void (*inProc)(int, char*, int), void (*out
 	fds[1].events = POLLIN;
 
 	while (!_quit) {
-		if (poll(fds, 2, 10) < 0) { perror("clientLoop.poll"); exit(EXIT_FAILURE); }
+		if (poll(fds, 2, -1) < 0) { perror("clientLoop.poll"); exit(EXIT_FAILURE); }
 
 		int length = -1, i;
 
@@ -60,12 +60,16 @@ void clientLoop(int sock, int iface, void (*inProc)(int, char*, int), void (*out
 			if (fds[i].revents & POLLIN) { /* receiving data from server/iface */
 				char *buf = (char*) malloc((BUFSIZE + 1) * sizeof(char));
 				length = read(fds[i].fd, buf, BUFSIZE);
-				if (length < 0) { perror("clientLoop.read"); free(buf); exit(EXIT_FAILURE); }
+				if (length <= 0) {
+					if (length == 0) continue;
+					else { perror("clientLoop.read"); free(buf); exit(EXIT_FAILURE); }
+				}
 				buf[length] = '\0';
 
-				if (i == 0) inProc(sock, buf, length);
-				else outProc(sock, buf, length);
-				
+				int status;
+				status = (i == 0) ? inProc(sock, buf, length) : outProc(sock, buf, length);
+				if (status < 0) stopConnexions();
+
 				free(buf);
 			}
 		}

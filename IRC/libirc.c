@@ -4,8 +4,10 @@
 #include <unistd.h>
 
 #include "libirc.h"
+#include "colors.h"
 
-#define BUFSIZE 2048
+
+#define BUFSIZE 4096
 #define NAMELEN 40
 #define CMDLEN 20
 
@@ -13,17 +15,30 @@ static char channel[NAMELEN];
 static int channelset = 0;
 
 
-int setupUser(int sock, char* nick, char* usr) {
+int setupUser(int sock, char* nick, char* usr, int retries) {
+	#ifdef DEBUG
+		printf("setupUser: %d try left\n", retries);
+	#endif
+
+	if (retries == 0)
+		return -1;
+
 	char* buf = (char*) malloc((BUFSIZE + 1) * sizeof(char)); buf[0] = '\0';
 	int length;
 
 	if (read(sock, buf, BUFSIZE) < 0) {
 		perror("libcom.setUpUser.read");
 		free(buf);
-		return -1;
+		return -2;
 	}
+	else if (strstr(buf, "Found your hostname") != NULL) {
+		#ifdef DEBUG
+			setcolor(GREEN);
+			printf("Srv >> %s", buf);
+			setcolor(RESET);
+			fflush(stdout);
+		#endif
 
-	if (strstr(buf, "Found your hostname") != NULL) {
 		length = sprintf(buf, "NICK %s\n", nick);
 		if (length != write(sock, buf, length)) {
 			perror("libcom.setupUser.write");
@@ -48,17 +63,24 @@ int setupUser(int sock, char* nick, char* usr) {
 		free(buf);
 		return 0;
 	} else {
-		printf("Could not connect to the server\n");
+		setcolor(GREEN);
+		printf("Srv >> %s", buf);
+		setcolor(RESET);
+		fflush(stdout);
 		free(buf);
-		return -2;
+		return setupUser(sock, nick, usr, retries - 1);
 	}
 }
 
 
-void procIncomingMessage(int sock, char* msg, int size) {
+int procIncomingMessage(int sock, char* msg, int size) {
 	char* sender = (char*) malloc((NAMELEN + 1) * sizeof(char));
 	char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
 	char* message = (char*) malloc(size * sizeof(char));
+
+	#ifdef DEBUG
+		printf("Received the message: \"%s\"\n", msg);
+	#endif
 
 	if (getMsgReceived(msg, size, sender, dest, message) == 3) {
 		printf(((dest[0] == '#') ? "%12s | %s\n" : ">%10s< | %s\n"), sender, message);
@@ -68,29 +90,40 @@ void procIncomingMessage(int sock, char* msg, int size) {
 		#endif
 		int length = sprintf(message, "PONG :%s\n", sender);
 		write(sock, message, length);
-	} else
-		printf("Srv >> %s\n", msg);
+	} else {
+		#ifdef DEBUG
+			printf("No pattern detected\n");
+		#endif
+		setcolor(GREEN);
+		printf("Srv >> %s", msg);
+		setcolor(RESET);
+		fflush(stdout);
+	}
 
 	free(sender); free(dest); free(message);
+
+	return 0;
 }
 
 
-void procOutgoingMessage(int sock, char* msg, int size) {
-	int length, valid = 1;
+int procOutgoingMessage(int sock, char* msg, int size) {
+	int length, res, valid = 1;
 	char* buf = (char*) malloc((size + NAMELEN + CMDLEN) * sizeof(char));
 
 	if (msg[0] != '/') {
+		res = 0;
 		if (channelset == 0) { /* Checking if the channel is set */
-			printf("Can't send the message: join a channel first\n");
-			return;
+			printf("Can't send the message: join a channel first\n"); valid = 0;
 		} else {
 			length = sprintf(buf, "PRIVMSG %s :%s", channel, msg);
 		}
 	}
 	else if (strstr(msg, "join") == (msg + 1)) {
-		if (channelset == 1)
+		res = 1;
+		if (channelset == 1) {
 			printf("Already joined channel %s\n", channel);
-		else if (sscanf(msg, "/join %s\n", channel) == 1) {
+			valid = 0;
+		} else if (sscanf(msg, "/join %s\n", channel) == 1) {
 			length = sprintf(buf, "JOIN %s\n", channel);
 			printf("Joining channel %s\n", channel);
 			channelset = 1;
@@ -99,6 +132,7 @@ void procOutgoingMessage(int sock, char* msg, int size) {
 		}
 	}
 	else if (strstr(msg, "msg") == (msg + 1)) {
+		res = 2;
 		char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
 		char* message = (char*) malloc(size * sizeof(char));
 		if (setMsgDest(msg, dest, message) == 2)
@@ -108,25 +142,37 @@ void procOutgoingMessage(int sock, char* msg, int size) {
 		}
 		free(dest); free(message);
 	}
+	else if (strstr(msg, "leave") == (msg + 1)) {
+		res = 3;
+		if (channelset == 1) {
+			length = sprintf(buf, "JOIN 0\n");
+			channelset = 0;
+			printf("Leaving channel %s\n", channel);
+		} else { printf("No channel set\n"); valid = 0; }
+	}
 	else if (strstr(msg, "quit") == (msg + 1)) {
+		res = -1;
 		char* message = (char*) malloc(size * sizeof(char));
-		if (sscanf(msg, "/quit %s\n", message) == 1)
+		if (sscanf("/quit %s\n", message) != 0)
 			length = sprintf(buf, "QUIT :%s\n", message);
 		else
 			length = sprintf(buf, "QUIT\n");
 		free(message);
+		printf("Quitting\n");
 	}
 	else {
-		printf("Invalid command \"%s\"\n", buf); valid = 0;
+		printf("Invalid command \"%s\"\n", msg); valid = 0;
 	}
 
 	if (valid == 1) {
 		write(sock, buf, length);
 		#ifdef DEBUG
-			printf("\tCommand sent: >>%s<<\n", buf);
+			printf("\tCommand sent: %s\n", buf);
 		#endif
 	}
 	free(buf);
+
+	return res;
 }
 
 

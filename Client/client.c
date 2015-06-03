@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
 	else printf("Connected to server sock #%d\n", sock);
 
 	/* Setting user info */
-	if (setupUser(sock, nick, usr) < 0) return -1;
+	if (setupUser(sock, nick, usr, 7) < 0) return -1;
 
 	/* Starting main loop */
 	clientLoop(sock, 0, procIncomingMessage, procOutgoingMessage);
