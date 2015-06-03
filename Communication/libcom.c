@@ -62,8 +62,10 @@ void clientLoop(int sock, int iface, void (*inProc)(int, char*, int), void (*out
 				length = read(fds[i].fd, buf, BUFSIZE);
 				if (length < 0) { perror("clientLoop.read"); free(buf); exit(EXIT_FAILURE); }
 				buf[length] = '\0';
+
 				if (i == 0) inProc(sock, buf, length);
 				else outProc(sock, buf, length);
+				
 				free(buf);
 			}
 		}

@@ -23,10 +23,10 @@ void usage(char* pgm) {
 int main(int argc, char** argv) {
 	/* Analyzing options */
 	int option = 0;
-	char* port = (char *) malloc(5 * sizeof(char));
-	char* server = (char *) malloc(STRLEN * sizeof(char));
-	char* nick = (char *) malloc(STRLEN * sizeof(char));
-	char* usr = (char *) malloc(STRLEN * sizeof(char));
+	char port[5] = {'\0'};
+	char server[STRLEN] = {'\0'};
+	char nick[STRLEN] = {'\0'};
+	char usr[STRLEN] = {'\0'};
 	bool fnick = false, fusr = false;
 	/* Setting default values */
 	sprintf(server, "irc.rizon.net");
@@ -36,17 +36,17 @@ int main(int argc, char** argv) {
 	while ((option = getopt(argc, argv, "p:s:n:u:")) != -1) {
 		switch (option) {
 			case 'p':
-				port = optarg;
+				strcpy(port, optarg);
 				break;
 			case 's':
-				server = optarg;
+				strcpy(server, optarg);
 				break;
 			case 'n':
-				nick = optarg;
+				strcpy(nick, optarg);
 				fnick = true;
 				break;
 			case 'u':
-				usr = optarg;
+				strcpy(usr, optarg);
 				fusr = true;
 				break;
 			case '?':
@@ -65,6 +65,7 @@ int main(int argc, char** argv) {
 
 	printf("Trying to connect to %s:%s\n", server, port);
 	int sock = connexionServeur(server, port);
+
 	if (sock < 0) { perror("Could not connect"); return -1; }
 	else printf("Connected to server sock #%d\n", sock);
 
