@@ -26,49 +26,56 @@ int setupUser(int sock, char* nick, char* usr, int retries) {
 	char* buf = (char*) malloc((BUFSIZE + 1) * sizeof(char)); buf[0] = '\0';
 	int length;
 
-	if (read(sock, buf, BUFSIZE) < 0) {
+	length = read(sock, buf, BUFSIZE);
+
+	if (length < 0) {
 		perror("libcom.setUpUser.read");
 		free(buf);
 		return -2;
 	}
-	else if (strstr(buf, "Found your hostname") != NULL) {
-		#ifdef DEBUG
+	else {
+		buf[length] = '\0';
+		if (strstr(buf, "Found your hostname") != NULL) {
+			#ifdef DEBUG
+				setcolor(GREEN);
+				printf("Srv >> %s", buf);
+				setcolor(RESET);
+				fflush(stdout);
+			#endif
+
+			length = sprintf(buf, "NICK %s\n", nick);
+			if (length != write(sock, buf, length)) {
+				perror("libcom.setupUser.write");
+				free(buf);
+				return -3;
+			}
+			#ifdef DEBUG
+				printf("Command sent: %s\n", buf);
+			#endif
+
+			length = sprintf(buf, "USER %s 8 * :%s\n", nick, usr);
+			if (length != write(sock, buf, length)) {
+				perror("libcom.setupUser.write");
+				free(buf);
+				return -4;
+			}
+			#ifdef DEBUG
+				printf("Command sent: %s\n", buf);
+			#endif
+
+			printf("Connected !\n");
+			free(buf);
+
+			return 0;
+		} else {
 			setcolor(GREEN);
 			printf("Srv >> %s", buf);
 			setcolor(RESET);
 			fflush(stdout);
-		#endif
-
-		length = sprintf(buf, "NICK %s\n", nick);
-		if (length != write(sock, buf, length)) {
-			perror("libcom.setupUser.write");
 			free(buf);
-			return -3;
-		}
-		#ifdef DEBUG
-			printf("Command sent: %s\n", buf);
-		#endif
 
-		length = sprintf(buf, "USER %s 8 * :%s\n", nick, usr);
-		if (length != write(sock, buf, length)) {
-			perror("libcom.setupUser.write");
-			free(buf);
-			return -4;
+			return setupUser(sock, nick, usr, retries - 1);
 		}
-		#ifdef DEBUG
-			printf("Command sent: %s\n", buf);
-		#endif
-
-		printf("Connected !\n");
-		free(buf);
-		return 0;
-	} else {
-		setcolor(GREEN);
-		printf("Srv >> %s", buf);
-		setcolor(RESET);
-		fflush(stdout);
-		free(buf);
-		return setupUser(sock, nick, usr, retries - 1);
 	}
 }
 
@@ -96,8 +103,12 @@ int procIncomingMessage(int sock, char* msg, int size) {
 		#ifdef DEBUG
 			printf("Sending PONG to %s\n", sender);
 		#endif
-		int length = sprintf(message, "PONG :%s\n", sender);
-		write(sock, message, length);
+		char* buf = (char*) malloc((size + CMDLEN) * sizeof(char));
+		int length = sprintf(buf, "PONG :%s\n", sender);
+		if (length != write(sock, buf, length)) {
+			perror("procIncomingMessage.write"); return -1;
+		}
+		free(buf);
 	} else {
 		#ifdef DEBUG
 			printf("No pattern detected\n");
@@ -142,13 +153,13 @@ int procOutgoingMessage(int sock, char* msg, int size) {
 	else if (strstr(msg, "msg") == (msg + 1)) {
 		res = 2;
 		char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
-		char* message = (char*) malloc(size * sizeof(char));
-		if (setMsgDest(msg, dest, message) == 2)
+		char* message = NULL;
+		if (setMsgDest(msg, dest, &message) == 2)
 			length = sprintf(buf, "PRIVMSG %s :%s\n", dest, message);
 		else {
 			printf("Error command: %s\n", msg); valid = 0;
 		}
-		free(dest); free(message);
+		free(dest);
 	}
 	else if (strstr(msg, "leave") == (msg + 1)) {
 		res = 3;
@@ -169,11 +180,14 @@ int procOutgoingMessage(int sock, char* msg, int size) {
 		printf("Quitting\n");
 	}
 	else {
+		res = 0;
 		printf("Invalid command \"%s\"\n", msg); valid = 0;
 	}
 
 	if (valid == 1) {
-		write(sock, buf, length);
+		if (length != write(sock, buf, length)) {
+			perror("procOutgoingMessage.write"); return -1;
+		}
 		#ifdef DEBUG
 			printf("\tCommand sent: %s\n", buf);
 		#endif
@@ -185,32 +199,36 @@ int procOutgoingMessage(int sock, char* msg, int size) {
 
 
 /* Equivalent to reg expression \/msg [[:alphanum:]] [[:alphanum:] ] */
-int setMsgDest(char* buf, char* dest, char* msg) {
-	int i = 0, j = 0, res = 0;
-	char cmd[5] = "/msg ";
-	for (i = 0; i < 5; i++) {
-		if (cmd[i] != buf[i]) return -1;
+int setMsgDest(char* buf, char* dest, char** msg) {
+	int i = 0, res = 0;
+	char* cmd = (char*) malloc((CMDLEN + 1) * sizeof(char));
+
+	res = sscanf(buf, "%s %s", cmd, dest);
+	#ifdef DEBUG
+		printf("setMsgDest got: res: %d cmd: %s dest: %s\n", res, cmd, dest);
+	#endif
+
+	if (res != 2 || strcmp("/msg", cmd) != 0)
+		res = 0;
+	else {
+		res = 1; /* We already got the destination name */
+		i = strstr(buf, dest) - buf;
+		while (buf[i] != ' ' && buf[i] != '\0') i++; /* ignoring the dest name */
+		while (buf[i] == ' ' && buf[i] != '\0') i++; /* ignoring spaces */
+
+		*msg = buf + i;
+		if (**msg != '\0') res++;
+
+		#ifdef DEBUG
+			printf("setMsgDest set: dest: %s msg: %s\n", dest, *msg);
+		#endif
 	}
 
-	while (buf[i] == ' ' && buf[i] != '\0') i++; /* ignoring spaces */
-
-	while (buf[i] != ' ' && buf[i] != '\0') { /* getting dest name */
-		dest[j] = buf[i];
-		i++; j++;
-	}
-	dest[j] = '\0'; if (j != 0) res++;
-
-	while (buf[i] == ' ' && buf[i] != '\0') i++; /* ignoring spaces */
-
-	j = 0;
-	while (buf[i] != '\0') { /* getting message */
-		msg[j] = buf[i];
-		i++; j++;
-	}
-	msg[j] = '\0'; if (j != 0) res++;
+	free(cmd);
 
 	return res;
 }
+
 
 int getMsgReceived(char* buf, int size, char* sender, char* dest, char** msg) {
 	int i = 0, j = 0, res = 0;
@@ -228,7 +246,7 @@ int getMsgReceived(char* buf, int size, char* sender, char* dest, char** msg) {
 		res = 1; /* We already got the dest name */
 
 		/* Ignoring chars before ':' */
-		while ((buf[i] & (':' | '\0')) != (':' | '\0')) i++;
+		while (buf[i] != ':' && buf[i] != '\0') i++;
 		i++;
 
 		/* Getting sender name */
