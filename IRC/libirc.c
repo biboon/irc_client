@@ -89,10 +89,10 @@ int getClientCmd(char* buf, char** param) {
 	if (buf[0] != '/') return SNOTCMD;
 
 	/* Getting the actual command */
-	if (strstr(buf, "msg ") == (buf + 1)) res = SMSG;
-	else if (strstr(buf, "join ") == (buf + 1)) res = SJOIN;
-	else if (strstr(buf, "quit ") == (buf + 1)) res = SQUIT;
-	else if (strstr(buf, "leave ") == (buf + 1)) res = SLEAVE;
+	if (strstr(buf, "msg") == (buf + 1)) res = SMSG;
+	else if (strstr(buf, "join") == (buf + 1)) res = SJOIN;
+	else if (strstr(buf, "quit") == (buf + 1)) res = SQUIT;
+	else if (strstr(buf, "leave") == (buf + 1)) res = SLEAVE;
 
 	if (res != 0) {
 		while (buf[i] != ' ' && buf[i] != '\0') i++;
@@ -132,31 +132,38 @@ int getServerCmd (char* buf, char** param) {
 
 
 int procIncomingMessage(int sock, char* msg, int size) {
-/*
-	char* sender = (char*) malloc((NAMELEN + 1) * sizeof(char));
-	char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
-	char* message = NULL;
+	char* param = NULL;
 
 	#ifdef DEBUG
 		printf("Received the message: \"%s\"\n", msg);
 	#endif
 
-	if (getMsgReceived(msg, size, sender, dest, &message) == 3) {
-		if (dest[0] == '#')
-			printf("%12s | %s", sender, message);
-		else {
-			setcolor(RED);
-			printf("%12s", sender);
-			setcolor(RESET);
-			printf(" | %s", message);
+	int res = getServerCmd(msg, &param);
+	#ifdef DEBUG
+		printf("Got the server command code #%d\n", res);
+	#endif
+
+	if (res == PRIVMSG) {
+		char* sender = (char*) malloc((NAMELEN + 1) * sizeof(char));
+		char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
+		if (getMsgReceived(msg, size, sender, dest, &param) == 3) {
+			if (dest[0] == '#')
+				printf("%12s | %s", sender, param);
+			else {
+				setcolor(RED);
+				printf("%12s", sender);
+				setcolor(RESET);
+				printf(" | %s", param);
+			}
+			fflush(stdout);
 		}
-		fflush(stdout);
-	} else if (getPingRequest(msg, size, sender) == 2) {
+		free(sender); free(dest);
+	} else if (res == PING) {
 		#ifdef DEBUG
-			printf("Sending PONG to %s\n", sender);
+			printf("Sending PONG to %s", param);
 		#endif
 		char* buf = (char*) malloc((size + CMDLEN) * sizeof(char));
-		int length = sprintf(buf, "PONG :%s\n", sender);
+		int length = sprintf(buf, "PONG :%s", param);
 		if (length != write(sock, buf, length)) {
 			perror("procIncomingMessage.write"); return -1;
 		}
@@ -171,12 +178,6 @@ int procIncomingMessage(int sock, char* msg, int size) {
 		fflush(stdout);
 	}
 
-	free(sender); free(dest);
-
-	return 0;
-*/
-
-	printf("SRV >> %s", msg);
 	return 0;
 }
 
@@ -187,6 +188,9 @@ int procOutgoingMessage(int sock, char* msg, int size) {
 	char* param = NULL;
 
 	res = getClientCmd(msg, &param);
+	#ifdef DEBUG
+		printf("Got the client command code #%d\n", res);
+	#endif
 
 	if (res == SNOTCMD) {
 		if (channelset == 0) { /* Checking if the channel is set */
@@ -281,8 +285,7 @@ int getMsgReceived(char* buf, int size, char* sender, char* dest, char** msg) {
 		printf("getMsgReceived got: res: %d longname: %s cmd: %s dest: %s\n", res, longname, cmd, dest);
 	#endif
 
-	if (res != 3 || strcmp("PRIVMSG", cmd) != 0)
-		res = 0;
+	if (res != 3) res = 0;
 	else {
 		res = 1; /* We already got the dest name */
 

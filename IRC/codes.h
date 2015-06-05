@@ -6,6 +6,8 @@
 #define JOIN 2
 #define PRIVMSG 3
 #define PING 4
+#define QUIT 5
+#define PART 6
 
 /* Client commands /cmd -> SCMD */
 #define SQUIT -1
