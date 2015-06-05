@@ -5,6 +5,7 @@
 
 #include "libirc.h"
 #include "colors.h"
+#include "codes.h"
 
 
 #define BUFSIZE 4096
@@ -80,7 +81,58 @@ int setupUser(int sock, char* nick, char* usr, int retries) {
 }
 
 
+/* Returns a code depending on the command entered */
+/* The param pointer is set at the first byte of parameter if exists */
+int getClientCmd(char* buf, char** param) {
+	int i = 0, res = 0;
+	/* Check the cmd starts with a / char */
+	if (buf[0] != '/') return SNOTCMD;
+
+	/* Getting the actual command */
+	if (strstr(buf, "msg ") == (buf + 1)) res = SMSG;
+	else if (strstr(buf, "join ") == (buf + 1)) res = SJOIN;
+	else if (strstr(buf, "quit ") == (buf + 1)) res = SQUIT;
+	else if (strstr(buf, "leave ") == (buf + 1)) res = SLEAVE;
+
+	if (res != 0) {
+		while (buf[i] != ' ' && buf[i] != '\0') i++;
+		while (buf[i] == ' ' && buf[i] != '\0') i++;
+		if (buf[i] != '\0' || res == SQUIT || res == SLEAVE) {
+			*param = buf + i;
+			return res;
+		}
+	}
+
+	/* no command found */
+	*param = NULL;
+	return SCMDERR;
+}
+
+
+/* Returns a code depending on the type of data received */
+int getServerCmd (char* buf, char** param) {
+	int res = CMDERR, i = 0;
+	*param = NULL;
+	/* Check if the first char is ':' */
+	if (buf[0] == ':') {
+		if (strstr(buf, "PRIVMSG") != NULL) res = PRIVMSG;
+		else if (strstr(buf, "JOIN") != NULL) res = JOIN;
+	} else {
+		if (strstr(buf, "PING") == buf) {
+			res = PING;
+			/* Ignoring until we get to the sender */
+			while (buf[i] != ':' && buf[i] != '\0') i++;
+			if (buf[i] == ':') *param = buf + i + 1;
+			else res = CMDERR;
+		}
+	}
+
+	return res;
+}
+
+
 int procIncomingMessage(int sock, char* msg, int size) {
+/*
 	char* sender = (char*) malloc((NAMELEN + 1) * sizeof(char));
 	char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
 	char* message = NULL;
@@ -122,65 +174,63 @@ int procIncomingMessage(int sock, char* msg, int size) {
 	free(sender); free(dest);
 
 	return 0;
+*/
+
+	printf("SRV >> %s", msg);
+	return 0;
 }
 
 
 int procOutgoingMessage(int sock, char* msg, int size) {
 	int length, res, valid = 1;
 	char* buf = (char*) malloc((size + NAMELEN + CMDLEN) * sizeof(char));
+	char* param = NULL;
 
-	if (msg[0] != '/') {
-		res = 0;
+	res = getClientCmd(msg, &param);
+
+	if (res == SNOTCMD) {
 		if (channelset == 0) { /* Checking if the channel is set */
 			printf("Can't send the message: join a channel first\n"); valid = 0;
 		} else {
 			length = sprintf(buf, "PRIVMSG %s :%s", channel, msg);
 		}
-	}
-	else if (strstr(msg, "join") == (msg + 1)) {
-		res = 1;
-		if (channelset == 1) {
-			printf("Already joined channel %s\n", channel);
-			valid = 0;
-		} else if (sscanf(msg, "/join %s\n", channel) == 1) {
-			length = sprintf(buf, "JOIN %s\n", channel);
-			printf("Joining channel %s\n", channel);
-			channelset = 1;
-		} else {
-			printf("Error command: %s\n", msg); valid = 0;
-		}
-	}
-	else if (strstr(msg, "msg") == (msg + 1)) {
-		res = 2;
+	} else if (res == SMSG) {
 		char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
 		char* message = NULL;
-		if (setMsgDest(msg, dest, &message) == 2)
+		if (setMsgDest(param, dest, &message) == 2)
 			length = sprintf(buf, "PRIVMSG %s :%s\n", dest, message);
 		else {
 			printf("Error command: %s\n", msg); valid = 0;
 		}
 		free(dest);
-	}
-	else if (strstr(msg, "leave") == (msg + 1)) {
-		res = 3;
+	} else if (res == SJOIN) {
+		if (channelset == 1) {
+			printf("Already joined channel %s\n", channel);
+			valid = 0;
+		} else {
+			strcpy(channel, param);
+			length = sprintf(buf, "JOIN %s\n", channel);
+			printf("Joining channel %s\n", channel);
+			channelset = 1;
+		}
+	} else if (res == SLEAVE) {
 		if (channelset == 1) {
 			length = sprintf(buf, "JOIN 0\n");
 			channelset = 0;
 			printf("Leaving channel %s\n", channel);
-		} else { printf("No channel set\n"); valid = 0; }
-	}
-	else if (strstr(msg, "quit") == (msg + 1)) {
-		res = -1;
-		char* message = (char*) malloc(size * sizeof(char));
-		if (sscanf("/quit %s\n", message) != 0)
+		} else {
+			printf("No channel set\n"); valid = 0;
+		}
+	} else if (res == SQUIT) {
+		if (param[0] != '\0') {
+			char* message = (char*) malloc(size * sizeof(char));
 			length = sprintf(buf, "QUIT :%s\n", message);
-		else
+			free(message);
+		} else
 			length = sprintf(buf, "QUIT\n");
-		free(message);
 		printf("Quitting\n");
-	}
-	else {
-		res = 0;
+	} else {
+		res = SCMDERR;
 		printf("Invalid command \"%s\"\n", msg); valid = 0;
 	}
 
@@ -200,31 +250,22 @@ int procOutgoingMessage(int sock, char* msg, int size) {
 
 /* Equivalent to reg expression \/msg [[:alphanum:]] [[:alphanum:] ] */
 int setMsgDest(char* buf, char* dest, char** msg) {
-	int i = 0, res = 0;
-	char* cmd = (char*) malloc((CMDLEN + 1) * sizeof(char));
+	int res = sscanf(buf, "%s", dest);
 
-	res = sscanf(buf, "%s %s", cmd, dest);
-	#ifdef DEBUG
-		printf("setMsgDest got: res: %d cmd: %s dest: %s\n", res, cmd, dest);
-	#endif
-
-	if (res != 2 || strcmp("/msg", cmd) != 0)
-		res = 0;
+	if (res != 1) res = 0;
 	else {
-		res = 1; /* We already got the destination name */
-		i = strstr(buf, dest) - buf;
+		int i = 0;
 		while (buf[i] != ' ' && buf[i] != '\0') i++; /* ignoring the dest name */
 		while (buf[i] == ' ' && buf[i] != '\0') i++; /* ignoring spaces */
 
 		*msg = buf + i;
-		if (**msg != '\0') res++;
-
-		#ifdef DEBUG
-			printf("setMsgDest set: dest: %s msg: %s\n", dest, *msg);
-		#endif
+		if (**msg != '\0') {
+			res++;
+			#ifdef DEBUG
+				printf("setMsgDest set: dest: %s msg: %s\n", dest, *msg);
+			#endif
+		}
 	}
-
-	free(cmd);
 
 	return res;
 }
@@ -272,23 +313,5 @@ int getMsgReceived(char* buf, int size, char* sender, char* dest, char** msg) {
 
 	free(cmd); free(longname);
 
-	return res;
-}
-
-int getPingRequest(char* buf, int size, char* sender) {
-	int i = 0, j = 0, res = 0;
-	char cmd[6] = "PING :"; cmd[6] = '\0';
-
-	while (i < size && cmd[i] != '\0') { /* checking we got a ping request */
-		if (cmd[i] != buf[i]) return -1;
-		i++;
-	}
-	res++;
-
-	while (i < size && buf[i] != '\n' && j < NAMELEN) { /* Getting the sender name */
-		sender[j] = buf[i];
-		i++; j++;
-	}
-	sender[j] = '\0'; if (j != 0) res++;
 	return res;
 }
