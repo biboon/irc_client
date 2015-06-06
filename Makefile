@@ -10,6 +10,8 @@ export CFLAGS = -Wall
 DIRS=Communication IRC Client
 
 # La cible generale
+release: $(patsubst %, _dir_%, $(DIRS))
+
 all: CFLAGS += -g
 all: $(patsubst %, _dir_%, $(DIRS))
 
