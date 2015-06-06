@@ -13,10 +13,22 @@
 #define TIMEOUT 10
 
 
+static struct sigaction action;
+
+
 void usage(char* pgm) {
 	printf("Usage: %s -n nickname -u username [-s server] [-p port]\n", pgm);
 	printf("Default server: irc.rizon.net\n");
 	printf("Default port: 6667\n");
+}
+
+
+/* Signals handling function */
+void hand(int sig) {
+	if (sig == SIGINT) {
+		printf("SIGINT signal received, closing connexion...\n");
+		stopConnexions();
+	} else perror("Unrecognized signal received");
 }
 
 
@@ -63,6 +75,11 @@ int main(int argc, char** argv) {
 	/* Checking nickname and username has been set */
 	if (!fnick || !fusr) { usage(argv[0]); return -1; }
 
+	/* Signal handling initialization */
+	action.sa_handler = hand;
+	sigaction(SIGINT, &action, NULL);
+
+	/* Connexion */
 	printf("Trying to connect to %s:%s\n", server, port);
 	int sock = connexionServeur(server, port);
 
