@@ -8,6 +8,7 @@
 #define PING 4
 #define QUIT 5
 #define PART 6
+#define NICK 7
 
 /* Client commands /cmd -> SCMD */
 #define SQUIT -1

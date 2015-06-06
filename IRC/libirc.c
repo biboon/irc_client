@@ -117,6 +117,9 @@ int getServerCmd (char* buf, char** param) {
 	if (buf[0] == ':') {
 		if (strstr(buf, "PRIVMSG") != NULL) res = PRIVMSG;
 		else if (strstr(buf, "JOIN") != NULL) res = JOIN;
+		else if (strstr(buf, "PART") != NULL) res = PART;
+		else if (strstr(buf, "QUIT") != NULL) res = QUIT;
+		else if (strstr(buf, "NICK") != NULL) res = NICK;
 	} else {
 		if (strstr(buf, "PING") == buf) {
 			res = PING;
@@ -148,10 +151,10 @@ int procIncomingMessage(int sock, char* msg, int size) {
 		char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
 		if (getMsgReceived(msg, size, sender, dest, &param) == 3) {
 			if (dest[0] == '#')
-				printf("%12s | %s", sender, param);
+				printf("%15s | %s", sender, param);
 			else {
 				setcolor(RED);
-				printf("%12s", sender);
+				printf("%15s", sender);
 				setcolor(RESET);
 				printf(" | %s", param);
 			}
@@ -168,6 +171,22 @@ int procIncomingMessage(int sock, char* msg, int size) {
 			perror("procIncomingMessage.write"); return -1;
 		}
 		free(buf);
+	} else if (res == JOIN || res == PART || res == QUIT || res == NICK) {
+		char* name = (char*) malloc((NAMELEN + 1) * sizeof(char));
+		getChannelActivity(msg, res, name, &param);
+		setcolor(GREEN);
+		printf("%15s", "Server");
+		setcolor(RESET);
+		if (res == JOIN)
+			printf(" | %s joined %s", name, param);
+		else if (res == PART)
+			printf(" | %s has left %s", name, param);
+		else if (res == QUIT)
+			printf(" | %s has quit %s", name, param);
+		else if (res == NICK)
+			printf(" | %s is now known as %s", name, param);
+		fflush(stdout);
+		free(name);
 	} else {
 		#ifdef DEBUG
 			printf("No pattern detected\n");
@@ -212,7 +231,12 @@ int procOutgoingMessage(int sock, char* msg, int size) {
 			printf("Already joined channel %s\n", channel);
 			valid = 0;
 		} else {
-			strcpy(channel, param);
+			int i = 0; /* Just getting the channel name without \n */
+			while (param[i] != '\n' && param[i] != '\0' && i < NAMELEN) {
+				channel[i] = param[i];
+				i++;
+			}
+			channel[i] = '\0';
 			length = sprintf(buf, "JOIN %s\n", channel);
 			printf("Joining channel %s\n", channel);
 			channelset = 1;
@@ -275,6 +299,7 @@ int setMsgDest(char* buf, char* dest, char** msg) {
 }
 
 
+/* Gets the sender, the destination and the message */
 int getMsgReceived(char* buf, int size, char* sender, char* dest, char** msg) {
 	int i = 0, j = 0, res = 0;
 	char* cmd = (char*) malloc((CMDLEN + 1) * sizeof(char));
@@ -307,7 +332,7 @@ int getMsgReceived(char* buf, int size, char* sender, char* dest, char** msg) {
 		/* Ignoring until we get to the message */
 		while (buf[i] != ':' && buf[i] != '\0') i++;
 		if (buf[i] == ':') { i++; res++; }
-		*msg = (buf + i);
+		*msg = buf + i;
 
 		#ifdef DEBUG
 			printf("getMsgReceived set: sender: %s dest: %s msg: %s\n", sender, dest, *msg);
@@ -315,6 +340,40 @@ int getMsgReceived(char* buf, int size, char* sender, char* dest, char** msg) {
 	}
 
 	free(cmd); free(longname);
+
+	return res;
+}
+
+
+/* Gives info on channel activity */
+int getChannelActivity(char* buf, int cmd, char* name, char** msg) {
+	int i = 0, j = 0, res = 0;
+
+	/* Ignoring chars before ':' */
+	while (buf[i] != ':' && buf[i] != '\0') i++;
+	i++;
+
+	/* Getting sender name */
+	while (buf[i + j] != '!' && buf[i + j] != '\0' && j < NAMELEN) {
+		name[j] = buf[i + j];
+		j++;
+	}
+	if (j != 0) res++;
+	name[j] = '\0';
+	i += j; j = 0;
+
+	char* ptr = NULL; i = 0;
+	if (cmd == JOIN) ptr = strstr(buf, "JOIN");
+	else if (cmd == PART) ptr = strstr(buf, "PART");
+	else if (cmd == QUIT) ptr = strstr(buf, "QUIT");
+	else if (cmd == NICK) ptr = strstr(buf, "NICK");
+
+	/* Getting to the message */
+	while (ptr[i] != ' ' && ptr[i] != '\0') i++;
+	while ((ptr[i] == ' ' || ptr[i] == ':') && ptr[i] != '\0') i++;
+
+	*msg = ptr + i;
+	res++;
 
 	return res;
 }

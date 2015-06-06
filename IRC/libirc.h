@@ -7,5 +7,6 @@ int procIncomingMessage(int sock, char* msg, int size);
 int procOutgoingMessage(int sock, char* msg, int size);
 int setMsgDest(char* buf, char* dest, char** msg);
 int getMsgReceived(char* buf, int size, char* sender, char* dest, char** msg);
+int getChannelActivity(char* buf, int cmd, char* name, char** msg);
 
 #endif
