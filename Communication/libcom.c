@@ -54,7 +54,7 @@ void clientLoop(int sock, int iface, int (*inProc)(int, char*, int), int (*outPr
 	while (!_quit) {
 		if (poll(fds, 2, -1) < 0) { perror("clientLoop.poll"); exit(EXIT_FAILURE); }
 
-		int length = -1, i;
+		int length = 0, i;
 
 		for (i = 0; i < 2; i++) {
 			if (fds[i].revents & POLLIN) { /* receiving data from server/iface */

@@ -38,9 +38,7 @@ int setupUser(int sock, char* nick, char* usr, int retries) {
 		buf[length] = '\0';
 		if (strstr(buf, "Found your hostname") != NULL) {
 			#ifdef DEBUG
-				setcolor(GREEN);
-				printf("Srv >> %s", buf);
-				setcolor(RESET);
+				printf("%s", buf);
 				fflush(stdout);
 			#endif
 
@@ -69,9 +67,7 @@ int setupUser(int sock, char* nick, char* usr, int retries) {
 
 			return 0;
 		} else {
-			setcolor(GREEN);
-			printf("Srv >> %s", buf);
-			setcolor(RESET);
+			printf("%s", buf);
 			fflush(stdout);
 			free(buf);
 
@@ -120,6 +116,7 @@ int getServerCmd (char* buf, char** param) {
 		else if ((ptr = strstr(buf, "PART")) != NULL) res = PART;
 		else if ((ptr = strstr(buf, "QUIT")) != NULL) res = QUIT;
 		else if ((ptr = strstr(buf, "NICK")) != NULL) res = NICK;
+		else if ((ptr = strstr(buf, "MODE")) != NULL) res = MODE;
 	} else {
 		if ((ptr = strstr(buf, "PING")) != NULL) res = PING;
 	}
@@ -138,7 +135,7 @@ int procIncomingMessage(int sock, char* msg, int size) {
 	char* param = NULL;
 
 	#ifdef DEBUG
-		printf("Received the message: \"%s\"\n", msg);
+		printf("Received the message %d bytes: \"%s\"\n", size, msg);
 	#endif
 
 	int res = getServerCmd(msg, &param);
@@ -149,7 +146,7 @@ int procIncomingMessage(int sock, char* msg, int size) {
 	if (res == PRIVMSG) {
 		char* sender = (char*) malloc((NAMELEN + 1) * sizeof(char));
 		char* dest = (char*) malloc((NAMELEN + 1) * sizeof(char));
-		if (getMsgInfo(msg, size, sender, dest) == 2) {
+		if (getMsgInfo(msg, size, sender, dest, &param) == 2) {
 			if (dest[0] == '#')
 				printf("%15s | %s", sender, param);
 			else {
@@ -171,7 +168,7 @@ int procIncomingMessage(int sock, char* msg, int size) {
 			perror("procIncomingMessage.write"); return -1;
 		}
 		free(buf);
-	} else if (res == JOIN || res == PART || res == QUIT || res == NICK) {
+	} else if (res != CMDERR) {
 		char* name = (char*) malloc((NAMELEN + 1) * sizeof(char));
 		if (getChannelActivitySender(msg, name) == 1) {
 			setcolor(GREEN);
@@ -185,6 +182,8 @@ int procIncomingMessage(int sock, char* msg, int size) {
 				printf(" | %s has quit %s", name, param);
 			else if (res == NICK)
 				printf(" | %s is now known as %s", name, param);
+			else if (res == MODE)
+				printf(" | %s sets mode %s", name, param);
 			fflush(stdout);
 		}
 		free(name);
@@ -192,9 +191,7 @@ int procIncomingMessage(int sock, char* msg, int size) {
 		#ifdef DEBUG
 			printf("No pattern detected\n");
 		#endif
-		setcolor(GREEN);
-		printf("Srv >> %s", msg);
-		setcolor(RESET);
+		printf("%s", msg);
 		fflush(stdout);
 	}
 
@@ -239,14 +236,18 @@ int procOutgoingMessage(int sock, char* msg, int size) {
 			}
 			channel[i] = '\0';
 			length = sprintf(buf, "JOIN %s\n", channel);
-			printf("Joining channel %s\n", channel);
+			#ifdef DEBUG
+				printf("Joining channel %s\n", channel);
+			#endif
 			channelset = 1;
 		}
 	} else if (res == SLEAVE) {
 		if (channelset == 1) {
 			length = sprintf(buf, "JOIN 0\n");
 			channelset = 0;
-			printf("Leaving channel %s\n", channel);
+			#ifdef DEBUG
+				printf("Leaving channel %s\n", channel);
+			#endif
 		} else {
 			printf("No channel set\n"); valid = 0;
 		}
@@ -301,7 +302,7 @@ int setMsgDest(char* buf, char* dest, char** msg) {
 
 
 /* Gets the sender, the destination and the message */
-int getMsgInfo(char* buf, int size, char* sender, char* dest) {
+int getMsgInfo(char* buf, int size, char* sender, char* dest, char** msg) {
 	int res = 0;
 	char* longname = (char*) malloc(size * sizeof(char));
 
@@ -317,8 +318,15 @@ int getMsgInfo(char* buf, int size, char* sender, char* dest) {
 
 	free(longname);
 
+	char* ptr = strstr(buf, dest);
+	int i = 0;
+
+	while (ptr[i] != ':' && ptr[i] != '\0') i++;
+	if (ptr[i] == ':') res++;
+	*msg = ptr + i + 1;
+
 	#ifdef DEBUG
-		printf("getMsgInfo set: res: %d sender: %s dest: %s\n", res, sender, dest);
+		printf("getMsgInfo set: res: %d sender: %s dest: %s msg: %s\n", res, sender, dest, *msg);
 	#endif
 
 	return res;

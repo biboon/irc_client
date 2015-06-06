@@ -6,7 +6,7 @@ int getClientCmd(char* buf, char** param);
 int procIncomingMessage(int sock, char* msg, int size);
 int procOutgoingMessage(int sock, char* msg, int size);
 int setMsgDest(char* buf, char* dest, char** msg);
-int getMsgInfo(char* buf, int size, char* sender, char* dest);
+int getMsgInfo(char* buf, int size, char* sender, char* dest, char** msg);
 int getChannelActivitySender(char* buf, char* name);
 
 #endif
